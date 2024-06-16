@@ -1,0 +1,155 @@
+---
+title: "Data"
+output: pdf_document
+date: "2024-06-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(data.table)
+
+num_of_students <- 50
+num_of_exams <- 10
+num_of_questions <- 30
+test <- 1
+
+intelligence_rating <- c(rnorm(num_of_students, 0.5, 0.15))
+for (i in 1:num_of_students) {
+  if (intelligence_rating[i] < 0){
+    intelligence_rating[i] <- 0
+  }
+  if (intelligence_rating[i] > 1){
+    intelligence_rating[i] <- 1
+  }
+}
+
+exam_ratings <- matrix(0, num_of_students, num_of_exams)
+for (i in 1:num_of_students) {
+  for (j in 1:num_of_exams) {
+    exam_ratings[i,j] <- rnorm(1, intelligence_rating[i], 0.1)
+    if (exam_ratings[i,j] < 0){
+      exam_ratings[i,j] <- 0
+    }
+    if (exam_ratings[i,j] >1){
+      exam_ratings[i,j] <- 1
+    }
+  }
+}
+
+
+exam_question_worth <- matrix(0, num_of_questions, num_of_exams)
+for (i in 1:num_of_questions) {
+  for (j in 1:num_of_exams) {
+    exam_question_worth[i,j] <- rgeom(1, 0.5) + 5
+  }
+}
+
+exam_questions_difficulty <- matrix(0, num_of_questions, num_of_exams)
+for (i in 1:num_of_questions) {
+  for (k in 1:num_of_exams) {
+    exam_questions_difficulty[i,k] <- rnorm(1, 1, 0.1)
+    if (exam_questions_difficulty[i,k] <= 0) {
+      exam_questions_difficulty[i,k] <- 0.001
+    }
+  }
+}
+
+question_probs <- list()
+for (k in 1:num_of_exams) {
+  exam_probs <- matrix(0, num_of_questions, num_of_students)
+  for (i in 1:num_of_questions) {
+    for (j in 1:num_of_students) {
+      exam_probs[i,j] <- (exam_ratings[j, k]/exam_questions_difficulty[i, k])
+      if (exam_probs[i,j] <= 0) {
+        exam_probs[i,j] <- 0
+      }
+      if (exam_probs[i,j] >= 0.999) {
+        exam_probs[i,j] <- 1
+      }
+    }
+  }
+  question_probs[[k]] <- exam_probs
+}
+
+num_of_q_cheated <- 6
+groups_size <- 4
+num_of_cheating_groups <- 4
+
+cheating_groups <- list()
+
+for (i in 1:num_of_cheating_groups) {
+  cheaters <- sample(1:num_of_students, groups_size, replace=FALSE)
+  cheated_q <- list()
+  for (k in 1:num_of_exams) {
+    cheated_q[[k]] <- sample(1:num_of_questions, num_of_q_cheated, replace=FALSE)
+  }
+  style <- list(students = cheaters, questions = cheated_q)
+  cheating_groups[[length(cheating_groups) + 1]] <- style
+}
+
+
+for (group in cheating_groups) {
+  for (k in 1:num_of_exams) {
+    for (j in group$students) {
+     for (i in group$questions[[k]]) {
+       question_probs[[k]][i,j] <- question_probs[[k]][i,j] + rnorm(1, 0.3, 0.1)
+       if (question_probs[[k]][i,j] >= 1){
+         question_probs[[k]][i,j] <- 1
+       }
+      }
+    }
+  }
+}
+
+
+exam_scores <- list()
+for (k in 1:num_of_exams) {
+  exam_score <- matrix(0, num_of_questions, num_of_students)
+  for (i in 1:num_of_questions) {
+    for (j in 1:num_of_students) {
+      exam_score[i,j] <-rbinom(1, exam_question_worth[i,k], question_probs[[k]][i,j])
+    }
+  }
+  exam_scores[[k]] <- exam_score
+}
+
+
+print(exam_scores)
+exam_totals <- c(0)
+
+for (k in 1:num_of_exams) {
+  exam_totals[k] <- sum(exam_question_worth[,k])
+}
+print(exam_totals)
+
+exam_percentages <- matrix(0, num_of_students, num_of_exams)
+for (k in 1:num_of_exams) {
+  for (i in 1:num_of_students) {
+    exam_percentages[i,k] <- sum(exam_scores[[k]][,i])/exam_totals[k]
+  }
+}
+
+print(exam_percentages)
+percentiles <- seq(0, 1, by = 0.01)
+percentile_data <- matrix(0, length(percentiles), num_of_exams)
+
+for (k in 1:num_of_exams) {
+  percentile_data[,k] <- quantile(exam_percentages[,k], percentiles)
+}
+
+average_percentiles <- rowMeans(percentile_data)
+
+matplot(percentiles, percentile_data, type="l", lty=1, 
+        xlab="Percentile", ylab="Exam Percentage", main="Percentile Plot of Exam Results")
+
+matplot(percentiles, average_percentiles, type="l", lty=1, xlab="Percentile", ylab="Exam Percentage", main="Percentile Plot of Mean Exam Results")
+```

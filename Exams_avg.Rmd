@@ -1,0 +1,259 @@
+---
+title: "Data"
+output: pdf_document
+date: "2024-06-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+
+num_of_exams <- 5
+num_of_questions <- 30
+num_of_students <- 50
+correctly_identified_avg <- list()
+lambda_avg <- list()
+unidentified_avg <- list()
+test <- 1
+for (r in 1:10) {
+  num_of_exams <- 5
+  exam_list <- c()
+  lambda_list <- c()
+  correct_list <- c()
+  not_list <-c()
+  while (num_of_exams <= 35) {
+    if (test == 1) {
+    num_of_exams <- num_of_exams + 1
+    }
+    intelligence_rating <- c(rnorm(num_of_students, 0.5, 0.10))
+    for (i in 1:num_of_students) {
+      if (intelligence_rating[i] < 0){
+        intelligence_rating[i] <- 0
+      }
+      if (intelligence_rating[i] > 1){
+        intelligence_rating[i] <- 1
+      }
+    }
+
+exam_ratings <- matrix(0, num_of_students, num_of_exams)
+for (i in 1:num_of_students) {
+  for (j in 1:num_of_exams) {
+    exam_ratings[i,j] <- rnorm(1, intelligence_rating[i], 0.1)
+    if (exam_ratings[i,j] < 0){
+      exam_ratings[i,j] <- 0
+    }
+    if (exam_ratings[i,j] >1){
+      exam_ratings[i,j] <- 1
+    }
+  }
+}
+
+
+exam_question_worth <- matrix(0, num_of_questions, num_of_exams)
+for (i in 1:num_of_questions) {
+  for (j in 1:num_of_exams) {
+    exam_question_worth[i,j] <- rgeom(1, 0.5) + 1
+  }
+}
+
+exam_questions_difficulty <- matrix(0, num_of_questions, num_of_exams)
+for (i in 1:num_of_questions) {
+  for (j in 1:num_of_exams) {
+    exam_questions_difficulty[i,j] <- rnorm(1, 1, 0.1)
+    if (exam_questions_difficulty[i,j] <= 0) {
+      exam_questions_difficulty[i,j] <- 0.001
+    }
+  }
+}
+
+question_probs <- list()
+for (k in 1:num_of_exams) {
+  exam_probs <- matrix(0, num_of_questions, num_of_students)
+  for (i in 1:num_of_questions) {
+    for (j in 1:num_of_students) {
+      exam_probs[i,j] <- (exam_ratings[j, k]/exam_questions_difficulty[i, k])
+      if (exam_probs[i,j] <= 0) {
+        exam_probs[i,j] <- 0
+      }
+      if (exam_probs[i,j] >= 0.999) {
+        exam_probs[i,j] <- 1
+      }
+    }
+  }
+  question_probs[[k]] <- exam_probs
+}
+
+num_of_q_cheated <- 6
+groups_size <- 4
+num_of_cheating_groups <- 4
+
+cheating_groups <- list()
+
+for (i in 1:num_of_cheating_groups) {
+  cheaters <- sample(1:num_of_students, groups_size, replace=FALSE)
+  cheated_q <- list()
+  for (k in 1:num_of_exams) {
+    cheated_q[[k]] <- sample(1:num_of_questions, num_of_q_cheated, replace=FALSE)
+  }
+  style <- list(students = cheaters, questions = cheated_q)
+  cheating_groups[[length(cheating_groups) + 1]] <- style
+}
+
+
+for (group in cheating_groups) {
+  for (k in 1:num_of_exams) {
+    for (j in group$students) {
+     for (i in group$questions[[k]]) {
+       question_probs[[k]][i,j] <- question_probs[[k]][i,j] + rnorm(1, 0.3, 0.1)
+       if (question_probs[[k]][i,j] >= 1){
+         question_probs[[k]][i,j] <- 1
+       }
+      }
+    }
+  }
+}
+
+
+exam_scores <- list()
+for (k in 1:num_of_exams) {
+  exam_score <- matrix(0, num_of_questions, num_of_students)
+  for (i in 1:num_of_questions) {
+    for (j in 1:num_of_students) {
+      exam_score[i,j] <-rbinom(1, 4 * exam_question_worth[i,k], question_probs[[k]][i,j])/4
+    }
+  }
+  exam_scores[[k]] <- exam_score
+}
+
+
+question_percents <- list()
+for (k in 1:num_of_exams) {
+  question_per <- matrix(0, num_of_questions, num_of_students)
+  for (i in 1:num_of_questions) {
+    for (j in 1:num_of_students) {
+      question_per[i,j] <- (exam_scores[[k]][i,j]/exam_question_worth[i,k]) * exam_questions_difficulty[i,k]
+    }
+  }
+  question_percents[[k]] <- question_per
+}
+
+
+
+library(matrixStats)
+
+standard_df <-list()
+for (k in 1:num_of_exams) {
+  standard_exam <- matrix(0, num_of_questions, num_of_students)
+  student_means <- colMeans(question_percents[[k]])
+  student_sds <- colSds(question_percents[[k]])
+  for (j in 1:num_of_students) {
+    standard_student <- (question_percents[[k]][,j] - student_means[j])/student_sds[j]
+    standard_exam[,j] <- standard_student
+  }
+  standard_df[[k]] <- standard_exam
+}
+
+library(glasso)
+
+total_score <- matrix(0, num_of_students, num_of_students)
+
+
+
+falsely_accused <- 0
+lambda <- 1
+while (falsely_accused == 0) {
+    total_score <- matrix(0, num_of_students, num_of_students)
+    lambda <- lambda - 0.05
+    for (k in 1:num_of_exams) {
+      S <- cov(standard_df[[k]])
+      test <- 1
+      result <- try(glasso(S, rho = lambda), silent = TRUE)
+      if (inherits(result, "try-error")) {
+        test <- 0
+        next
+      } else {
+        test <- 1
+      }
+      diag(result$wi) <- 0
+      total_score <- total_score + abs(result$wi)
+    }
+    cheater_list_pred <- c()
+    for (i in 1:num_of_questions) {
+      for (j in 1:num_of_students) {
+        if (total_score[i,j] >= 1) {
+          cheater_list_pred <- c(cheater_list_pred, i, j)
+        }
+      }
+    }
+    cheater_list_pred <- unique(cheater_list_pred)
+
+    cheater_list <- c()
+    for (group in cheating_groups) {
+      for (cheater in group$students) {
+        cheater_list <- c(cheater_list, cheater)
+      }
+    }
+    cheater_list <- unique(cheater_list)
+
+
+    falsely_accused <- sum(!(cheater_list_pred %in% cheater_list))
+    print(falsely_accused)
+
+    if (falsely_accused == 0) {
+      correctly_detected <- sum(cheater_list %in% cheater_list_pred)
+      not_detected <- sum(!(cheater_list %in% cheater_list_pred))
+    }
+}
+  correct_list <- c(correct_list, correctly_detected)
+  not_list <- c(not_list, not_detected)
+  lambda_list <- c(lambda_list, lambda)
+  exam_list <- c(exam_list, num_of_exams)
+
+  }
+print(correct_list)
+print(not_list)
+print(lambda_list)
+correctly_identified_avg[[r]] <- correct_list
+unidentified_avg[[r]] <- not_list
+lambda_avg[[r]] <- lambda_list
+}
+correctly_identified_average <- c(0)
+lambda_average <- c(0)
+unidentified_average <- c(0)
+
+for (r in 1:10) {
+  print(lambda_avg[[r]])
+  correctly_identified_average <- correctly_identified_average + correctly_identified_avg[[r]]
+  lambda_average <- lambda_average + lambda_avg[[r]]
+  unidentified_average <- unidentified_average + unidentified_avg[[r]]
+}
+
+correctly_identified_average <- correctly_identified_average/10
+lambda_average <- lambda_average/10
+unidentified_average <- unidentified_average/10
+
+print("correctly detected:")
+print(correctly_identified_average)
+print("not detected")
+print(unidentified_average)
+
+print("lambda")
+print(lambda_average)
+
+matplot(exam_list, cbind(correctly_identified_average, unidentified_average), type="l", lty = 1, col=c("green", "blue"), 
+        xlab = "Number of Exams Taken", ylab = "Number of Students", main = "Relationship between Number of Exams Taken \nand Model Performance at ''Optimal'' Lambda")
+legend("topright", legend = c("Correctly Identified Cheaters", "Undetected Cheaters"),
+       col = c("green", "blue"), lty = 1)
+
+matplot(exam_list, cbind(lambda_average), type="l", lty = 1, col="black", xlab = "Number of Exams Taken", ylab = "Lambda", main = "Relationship between ''Optimal'' Lambda \nand Number of Exams Taken")
+
+
+```
